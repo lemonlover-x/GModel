@@ -5,7 +5,6 @@ CycleGAN/logs
 RenewablePowerGAN/logs
 *.jpg
 DiffusionModelForTS/logs
-DiffusionModelForTS/.history
-DiffusionModelForTS/results
-DiffusionModelForTS/evaluation_results
 DiffusionModelForTS/data
+DiffusionModelForTS/.history
+DiffusionModelForTS/res
