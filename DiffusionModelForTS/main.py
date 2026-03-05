@@ -121,9 +121,6 @@ hyper_params = {
 # create the dataset
 dataset = MultiVarTimeSeriesDataset()
 dataloader = DataLoader(
-    dataset=dataset,
-    batch_size=hyper_params["batch_size"],
-    shuffle=True
 )
 # gpu
 device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')

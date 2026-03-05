@@ -266,8 +266,72 @@ def plot_generated_timeseries(
     axes[3].set_xlabel('Time step')
 
     plt.tight_layout()
-    plt.savefig('./results/fake2.svg', format="svg", bbox_inches='tight', dpi=300)
+    plt.savefig('./results/fake.svg', format="svg", bbox_inches='tight', dpi=300)
 
+def data_filter(
+    data,
+    season=None,
+    day_type=None,
+    low_ratio=0.2,
+    high_quantile=0.9,
+    low_quantile=0.1,
+    day_start=6,
+    day_end=18,
+):
+    """
+    基于真实光伏日分布特征的过滤：
+    1. 白天段不允许明显负值（允许小噪声）
+    2. 形态异常过滤（剧烈振荡）
+    3. 季节统计约束（你原逻辑保留）
+    """
+
+    pv = data[:, 0, :]  # (B, 24)
+
+    # ========= 1. 白天物理合理性约束 =========
+    pv_day = pv[:, day_start:day_end]
+    pv_max = pv.max(dim=1).values
+
+    # 允许 2% 峰值的负噪声
+    neg_tol = 0.02 * pv_max
+    valid_mask = pv_day.min(dim=1).values >= -neg_tol
+    data = data[valid_mask]
+
+    pv = data[:, 0, :]
+    pv_max = pv.max(dim=1).values
+
+    # ========= 2. 形态异常过滤 =========
+    tv = torch.mean(torch.abs(pv[:, 1:] - pv[:, :-1]), dim=1)
+    tv_thr = torch.quantile(tv, 0.98)
+    data = data[tv <= tv_thr]
+
+    pv = data[:, 0, :]
+    pv_max = pv.max(dim=1).values
+
+    # ========= 3. 季节统计过滤 =========
+    if season == 1:  # summer
+        low_thr = torch.quantile(pv_max, low_quantile)
+
+        high_mask = pv_max >= low_thr
+        low_mask = pv_max < low_thr
+
+        x_high = data[high_mask]
+        x_low = data[low_mask]
+
+        if x_low.shape[0] > 0:
+            keep_num = max(1, int(low_ratio * x_low.shape[0]))
+            idx = torch.randperm(x_low.shape[0])[:keep_num]
+            x_low = x_low[idx]
+
+        x_filtered = torch.cat([x_high, x_low], dim=0)
+
+    elif season == 3:  # winter
+        high_thr = torch.quantile(pv_max, high_quantile)
+        x_filtered = data[pv_max <= high_thr]
+
+    else:
+        x_filtered = data
+
+    return x_filtered
 
 def main(arg_dict):
     """"""
@@ -286,21 +350,25 @@ def main(arg_dict):
     # sampler
     sampler = Sampler(arg_dict, model, fp)
 
-    x_fake1 = sampler.sample()
+    x_fake = sampler.sample()
     # ===== 反归一化 =====
-    x_fake = denormalize_timeseries(x_fake1, dataset.stats)
+    x_fake1 = denormalize_timeseries(x_fake, dataset.stats)
+
+    # 数据过滤
+    x_fake1 = data_filter(x_fake1)
+    print(len(x_fake1))
 
     # 评估
     evaluator = Evaluator()
     rea_norm = get_timeseries_by_condition(dataset, season=arg_dict["season"], day_type=arg_dict["day_type"], denorm=False)
-    results = evaluator.evaluate(rea_norm, x_fake1)
+    results = evaluator.evaluate(rea_norm, x_fake)
     results_json = to_json_serializable(results)
     with open(f"evaluation_results/evaluation_season_{arg_dict['season']}_daytype_{arg_dict['day_type']}.json", "w", encoding="utf-8") as f:
         json.dump(results_json, f, indent=4, ensure_ascii=False)
 
     # 保存数据
     save_generated_by_condition(
-        x_fake,
+        x_fake1,
         season=arg_dict["season"],
         day_type=arg_dict["day_type"],
         save_root="./results/generated",
@@ -308,9 +376,7 @@ def main(arg_dict):
     )
     
     # plot
-    plot_generated_timeseries(x_fake, real)
-
-
+    plot_generated_timeseries(x_fake1, real)
 
 
 
@@ -318,7 +384,7 @@ if __name__ == '__main__':
 
     arg_dict = {
         "checkpoints": './logs/model_v1_nomlp_epoch_5000/model_4999.tar', 
-        "num": 100,  # the number of images you want to generate
+        "num": 500,  # the number of data you want to generate
         "T": 200,
         "season": 3,
         "day_type": 1,

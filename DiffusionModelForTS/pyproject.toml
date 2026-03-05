@@ -5,14 +5,18 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "fastdtw>=0.3.4",
     "matplotlib>=3.10.8",
-    "numpy>=2.2.6",
+    "numpy==1.26.4",
     "openpyxl>=3.1.5",
     "pandas>=2.3.3",
+    "scikit-learn>=1.7.2",
+    "scikit-learn-extra==0.3.0",
     "scipy>=1.15.3",
     "tensorboard>=2.20.0",
     "torch>=2.9.1",
     "tqdm>=4.67.1",
+    "tslearn>=0.7.0",
 ]
 
 [[tool.uv.index]]
